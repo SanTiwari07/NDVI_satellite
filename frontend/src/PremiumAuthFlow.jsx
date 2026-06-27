@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Leaf, ArrowLeft, Shield, AlertTriangle } from 'lucide-react';
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
-import { auth } from './firebase';
-import { apiUrl } from './api';
+import { Leaf, ArrowLeft, Shield } from 'lucide-react';
+import { sendOtp, verifyOtp } from './api';
 
 /* ─────────────────────────────────────────────────
    Inline animation styles injected into <head>
@@ -93,8 +91,7 @@ export default function PremiumAuthFlow({ onAuthSuccess }) {
   const [isError, setIsError]       = useState(false);
   const [errorMsg, setErrorMsg]     = useState('');
   const [isLoading, setIsLoading]   = useState(false);
-  const [confirmRes, setConfirmRes] = useState(null);  
-  const [useDemo, setUseDemo]       = useState(false);
+  const [confirmedPhone, setConfirmedPhone] = useState('');
 
   const otpRefs = useRef([]);
 
@@ -106,13 +103,6 @@ export default function PremiumAuthFlow({ onAuthSuccess }) {
     return () => document.head.removeChild(el);
   }, []);
 
-  /* Check if Firebase is configured */
-  useEffect(() => {
-    try {
-      const cfg = auth?.app?.options;
-      if (!cfg?.apiKey || cfg.apiKey === 'undefined') setUseDemo(true);
-    } catch { setUseDemo(true); }
-  }, []);
 
   /* OTP countdown timer */
   useEffect(() => {
@@ -145,38 +135,15 @@ export default function PremiumAuthFlow({ onAuthSuccess }) {
     if (rawPhone.length !== 10 || isLoading) return;
     setIsLoading(true);
     setIsError(false);
-
-    if (useDemo) {
-      setTimeout(() => {
-        setIsLoading(false);
-        setOtp(['','','','','','']);
-        setCountdown(60);
-        setIsError(false);
-        goTo('otp');
-      }, 900);
-      return;
-    }
-
     try {
-      if (!auth) {
-        setIsError(true);
-        setErrorMsg('Firebase is not initialized. Ensure frontend/.env defines VITE_FIREBASE_* and restart the dev server.');
-        return;
-      }
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-anchor', {
-          size: 'invisible',
-        });
-      }
-      const result = await signInWithPhoneNumber(auth, `+91${rawPhone}`, window.recaptchaVerifier);
-      setConfirmRes(result);
+      await sendOtp(rawPhone);
+      setConfirmedPhone(rawPhone);
       setOtp(['','','','','','']);
       setCountdown(60);
       goTo('otp');
     } catch (err) {
       setIsError(true);
-      setErrorMsg(err.message || 'Failed to send OTP.');
-      window.recaptchaVerifier?.render().then(id => window.grecaptcha?.reset(id)).catch(() => {});
+      setErrorMsg(err.message || 'Failed to send OTP. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -186,37 +153,13 @@ export default function PremiumAuthFlow({ onAuthSuccess }) {
     if (otpFull.length !== 6 || isLoading) return;
     setIsLoading(true);
     setIsError(false);
-
-    if (useDemo) {
-      setTimeout(() => {
-        setIsLoading(false);
-        goTo('success');
-        setTimeout(() => onAuthSuccess?.({ uid: 'demo', phone_number: `+91${rawPhone}` }), 1800);
-      }, 1500);
-      return;
-    }
-
     try {
-      const result = await confirmRes.confirm(otpFull);
-      const user = result.user;
-      const idToken = await user.getIdToken();
-
-      try {
-        await fetch(apiUrl('/api/auth/verify-token'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken }),
-        });
-      } catch {}
-
+      const result = await verifyOtp(confirmedPhone, otpFull);
       goTo('success');
-      setTimeout(() => onAuthSuccess?.({
-        uid: user.uid,
-        phone_number: user.phoneNumber,
-      }), 1800);
+      setTimeout(() => onAuthSuccess?.({ phone_number: result.phone }), 1800);
     } catch (err) {
       setIsError(true);
-      setErrorMsg('Incorrect OTP.');
+      setErrorMsg('Incorrect or expired OTP. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -256,12 +199,6 @@ export default function PremiumAuthFlow({ onAuthSuccess }) {
     <div className="auth-flow">
       <div className="auth-flow__blob auth-flow__blob--tr" aria-hidden />
       <div className="auth-flow__blob auth-flow__blob--bl" aria-hidden />
-
-      {useDemo && (
-        <div className="auth-flow__demo" role="status">
-          <AlertTriangle size={14} aria-hidden /> Demo mode — Firebase not configured
-        </div>
-      )}
 
       <div className="auth-flow__shell">
         <header className="auth-flow__brand">
@@ -414,7 +351,6 @@ export default function PremiumAuthFlow({ onAuthSuccess }) {
           <Shield size={12} aria-hidden /> Phone verification · secure session
         </footer>
       </div>
-      <div id="recaptcha-anchor" />
     </div>
   );
 }

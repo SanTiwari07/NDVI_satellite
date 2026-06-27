@@ -42,6 +42,7 @@ from services.index_service import compute_all_indices
 from services.grid_service import generate_grid, reduce_grid_values
 from services.stats_service import extract_farm_statistics
 from services.auth_service import init_firebase, verify_jwt_token
+from services.sms_service import send_otp, verify_otp
 from utils.geo_utils import geojson_to_ee_geometry, validate_polygon
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -356,6 +357,38 @@ def verify_token_endpoint():
     except Exception as exc:
         logger.exception("Server error verifying JWT token: %s", exc)
         return jsonify({"error": "Internal server error"}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OTP endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route("/api/auth/send-otp", methods=["POST"])
+def send_otp_endpoint():
+    """POST /api/auth/send-otp  body: { "phone": "9876543210" }"""
+    body = request.get_json(silent=True) or {}
+    phone = str(body.get("phone", "")).strip().replace(" ", "")
+    if len(phone) not in (10, 12) or not phone.isdigit():
+        return jsonify({"error": "Provide a valid 10-digit Indian mobile number."}), 400
+    try:
+        send_otp(phone)
+        return jsonify({"ok": True, "message": "OTP sent."}), 200
+    except RuntimeError as exc:
+        logger.warning("send_otp failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/api/auth/verify-otp", methods=["POST"])
+def verify_otp_endpoint():
+    """POST /api/auth/verify-otp  body: { "phone": "9876543210", "otp": "123456" }"""
+    body = request.get_json(silent=True) or {}
+    phone = str(body.get("phone", "")).strip().replace(" ", "")
+    otp   = str(body.get("otp",   "")).strip()
+    if not phone or not otp:
+        return jsonify({"error": "phone and otp are required."}), 400
+    if verify_otp(phone, otp):
+        return jsonify({"ok": True, "phone": f"+91{phone[-10:]}"}), 200
+    return jsonify({"error": "Incorrect or expired OTP."}), 401
 
 
 # ─────────────────────────────────────────────────────────────────────────────
