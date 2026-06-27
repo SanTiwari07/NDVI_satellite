@@ -122,8 +122,6 @@ def write_farm_alert(farm_id: str, vi_data: dict) -> None:
         "last_updated": <SERVER_TIMESTAMP>
       }
     """
-    db = get_firestore_client()
-
     cvi_mean = vi_data.get("cvi_mean", 0)
     if cvi_mean >= 0.6:
         crop_health = "Good"
@@ -136,6 +134,7 @@ def write_farm_alert(farm_id: str, vi_data: dict) -> None:
     water_stress = "Low" if ndmi >= 0.3 else ("Moderate" if ndmi >= 0.1 else "High")
 
     try:
+        db = get_firestore_client()
         db.collection("farm_alerts").document(farm_id).set({
             "crop_health": crop_health,
             "vegetation_index": round(vi_data.get("ndvi", 0), 4),

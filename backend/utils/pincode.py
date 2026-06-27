@@ -10,7 +10,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 PINCODE_API_BASE = "https://api.postalpincode.in/pincode"
-REQUEST_TIMEOUT_S = 8
+REQUEST_TIMEOUT_S = 4
 
 
 def resolve_pincode(pin_code: str) -> dict:

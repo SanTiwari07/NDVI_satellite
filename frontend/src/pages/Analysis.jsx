@@ -16,7 +16,7 @@ import TimelineBar from '../TimelineBar';
 import NavbarDropdown from '../NavbarDropdown';
 import { analyzeFarm, fetchAvailableDates, fetchDayAnalysis } from '../api';
 import * as turf from '@turf/turf';
-import { ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, LocateFixed } from 'lucide-react';
 import FieldNameModal from '../FieldNameModal';
 
 export default function Analysis() {
@@ -40,6 +40,7 @@ export default function Analysis() {
   // ── Dashboard state ────────────────────────────────────────────────────────
   const [activeBand, setActiveBand] = useState('ndvi');
   const [mapCenter, setMapCenter]   = useState([18.1676592, 75.8131346]);
+  const [locating, setLocating]     = useState(false);
 
   // Multi-field state
   const [fields, setFields]               = useState([]);
@@ -81,6 +82,19 @@ export default function Analysis() {
 
   const handleFlyTo = (coords) => {
     setMapCenter(coords);
+  };
+
+  const handleLocate = () => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setMapCenter([pos.coords.latitude, pos.coords.longitude]);
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { timeout: 10000 }
+    );
   };
 
   const handleDrawComplete = (geometry) => {
@@ -268,8 +282,12 @@ export default function Analysis() {
     <>
       <nav className="navbar">
         <div className="navbar__brand">
+          <svg className="navbar__brand-logo" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
           <div className="navbar__text">
-            <span className="navbar__title navbar__title--monitor">Satellite farm monitoring</span>
+            <span className="navbar__title">PRAGYA</span>
+            <span className="navbar__tagline">Satellite farm monitoring</span>
           </div>
         </div>
 
@@ -337,6 +355,17 @@ export default function Analysis() {
                   )}
                 </div>
             )}
+
+            <button
+              type="button"
+              className={`navbar__locate-btn${locating ? ' locate-spin' : ''}`}
+              title="My location"
+              aria-label="Fly to my current location"
+              onClick={handleLocate}
+              disabled={locating}
+            >
+              <LocateFixed size={16} strokeWidth={2} aria-hidden />
+            </button>
 
             {activeFieldId && editingFieldId !== activeFieldId && activeField && (
                 <button

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import KrishiMitraPanel from './KrishiMitraPanel';
 
-export default function Sidebar({ analysisData, activeField }) {
-    const [width, setWidth] = useState(400); 
+export default function Sidebar({ analysisData, activeField, collapsed = false }) {
+    const [width, setWidth] = useState(400);
     const isResizing = useRef(false);
 
     const handleMouseMove = useCallback((e) => {
@@ -30,14 +30,23 @@ export default function Sidebar({ analysisData, activeField }) {
     }, [handleMouseMove, handleMouseUp]);
 
     return (
-        <aside 
-           className="sidebar" 
-           role="complementary" 
+        <aside
+           className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`}
+           role="complementary"
            aria-label="Farm Assistant Panel"
-           style={{ width: `${width}px`, flexShrink: 0, position: 'relative' }}
+           aria-hidden={collapsed}
+           style={{
+             width: collapsed ? 0 : `${width}px`,
+             flexShrink: 0,
+             position: 'relative',
+             padding: collapsed ? 0 : undefined,
+             borderRightWidth: collapsed ? 0 : undefined,
+             overflow: 'hidden',
+             transition: 'width 0.25s ease, padding 0.25s ease',
+           }}
         >
             <KrishiMitraPanel analysisData={analysisData} activeField={activeField} />
-            <div 
+            {!collapsed && <div
                onMouseDown={(e) => {
                    e.preventDefault(); // Prevent text selection
                    isResizing.current = true;
@@ -57,7 +66,7 @@ export default function Sidebar({ analysisData, activeField }) {
                }}
                onMouseEnter={(e) => { if (!isResizing.current) e.target.style.backgroundColor = 'var(--c-brand)'; }}
                onMouseLeave={(e) => { if (!isResizing.current) e.target.style.backgroundColor = 'transparent'; }}
-            />
+            />}
         </aside>
     );
 }

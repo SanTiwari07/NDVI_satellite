@@ -285,6 +285,91 @@ html, body {
   gap: 8px;
 }
 
+/* ── Brand wordmark ─────────────────────────────────────────── */
+.navbar__brand-logo {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.35));
+}
+
+.navbar__title {
+  font-family: var(--font-heading, var(--font-body));
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--c-text);
+  line-height: 1.1;
+}
+
+.navbar__tagline {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--c-text-muted);
+  letter-spacing: 0.02em;
+}
+
+/* ── Navbar control groups (right side) ─────────────────────── */
+.navbar__controls--end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.navbar__group {
+  display: flex;
+  align-items: center;
+}
+
+/* The field selector + its inline action buttons live inside one pill. */
+.navbar__field-wrap {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+}
+
+/* Icon/label buttons that sit INSIDE the selector pill — borderless so they
+   read as part of the pill instead of nested floating boxes. */
+.navbar__rename-field-btn,
+.navbar__locate-btn,
+.navbar__link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  color: var(--c-text-muted);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--t-fast, 0.15s ease), background var(--t-fast, 0.15s ease);
+}
+
+.navbar__rename-field-btn {
+  padding: 0 8px;
+}
+
+.navbar__rename-field-btn:hover:not(:disabled),
+.navbar__locate-btn:hover:not(:disabled),
+.navbar__link-btn:hover:not(:disabled) {
+  color: var(--c-text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.navbar__locate-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.locate-spin { animation: locate-pulse 1s ease-in-out infinite; }
+@keyframes locate-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
 /* Field name modal (after draw / rename from menu) */
 .field-name-modal-backdrop {
   position: fixed;
@@ -784,6 +869,34 @@ html, body {
 .sidebar::-webkit-scrollbar        { width: 4px; }
 .sidebar::-webkit-scrollbar-track  { background: transparent; }
 .sidebar::-webkit-scrollbar-thumb  { background: var(--c-surface-3); border-radius: 2px; }
+
+/* Edge tab that collapses / expands the assistant panel. */
+.sidebar-edge-toggle {
+  flex-shrink: 0;
+  align-self: center;
+  position: relative;
+  z-index: 600;
+  width: 20px;
+  height: 56px;
+  margin-left: -1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--c-border);
+  border-left: none;
+  border-radius: 0 10px 10px 0;
+  background: var(--c-surface-2);
+  color: var(--c-text-muted);
+  cursor: pointer;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.25);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.sidebar-edge-toggle:hover {
+  color: var(--c-text);
+  background: var(--c-surface-3);
+}
 
 /* ΓöÇΓöÇ Cards ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 .card {
@@ -1407,7 +1520,7 @@ html, body {
 }
 
 .progress-step::before {
-  content: 'Γùï';
+  content: "\25CB";
   font-size: 10px;
   flex-shrink: 0;
 }
@@ -1418,14 +1531,14 @@ html, body {
   color: var(--c-accent);
 }
 
-.progress-step--active::before { content: 'Γùë'; }
+.progress-step--active::before { content: "\25C9"; }
 
 .progress-step--done {
   background: var(--c-surface-3);
   color: var(--c-text-muted);
 }
 
-.progress-step--done::before { content: 'Γ£ô'; color: var(--c-accent); }
+.progress-step--done::before { content: "\2713"; color: var(--c-accent); }
 
 /* ΓöÇΓöÇ Smooth GEE Tile Rendering ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 /* Force bilinear interpolation on tile images ΓÇö removes pixelated edges    */
@@ -1557,8 +1670,10 @@ html, body {
 /* ΓöÇΓöÇ Map Legend Overlay (position set inline ΓÇö draggable) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 .map-legend-overlay {
   position: absolute;
+  top: 14px;
+  left: 14px;
   z-index: 1000;
-  width: 280px;
+  width: 230px;
 }
 
 .map-legend-overlay .sidebar-legend {
@@ -1632,38 +1747,67 @@ html, body {
 .sidebar-legend__chevron {
   color: var(--c-text-muted);
   transition: transform 0.2s ease;
+  flex-shrink: 0;
 }
 
 .sidebar-legend__chevron.is-open {
   transform: rotate(180deg);
 }
 
+/* Two-line header: small "LEGEND" overline + "NDVI scale" title */
+.sidebar-legend__title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.sidebar-legend__title-wrap .sidebar-legend__title {
+  flex: none;
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+
+.sidebar-legend__subtitle {
+  font-family: var(--font-heading, var(--font-body));
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--c-text);
+  letter-spacing: -0.01em;
+}
+
 .sidebar-legend__body {
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--c-border);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .sidebar-legend__row {
   display: flex;
   align-items: center;
-  font-size: 12px;
+  font-size: 11px;
   font-family: var(--font-body);
 }
 
 .sidebar-legend__chip {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
   border-radius: 2px;
-  margin-right: 10px;
+  margin-right: 8px;
 }
 
 .sidebar-legend__range {
-  width: 76px;
+  width: 50px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--c-text);
@@ -1869,15 +2013,9 @@ html, body {
   padding: 0 10px;
 }
 
+/* Horizontal connector removed — it cut straight through the date labels. */
 .timeline-bar__line {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.12);
-  transform: translateY(-50%);
-  pointer-events: none;
+  display: none;
 }
 
 .timeline-bar__date {
@@ -1910,16 +2048,17 @@ html, body {
   cursor: wait;
 }
 
+/* Vertical tick above each date label. */
 .timeline-bar__tick {
   width: 2px;
   height: 10px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.3);
   border-radius: 1px;
   transition: all 0.2s ease;
 }
 
 .timeline-bar__date:hover .timeline-bar__tick {
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.55);
   height: 12px;
 }
 
