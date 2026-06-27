@@ -1,34 +1,31 @@
 import React, { useState } from 'react';
 
+// Compact 0.1-width bins so the list stays short and readable.
 const LEGEND_BINS = [
-    { range: '0.95 – 1.00', label: 'Better to use NDRE', color: '#007e47' },
-    { range: '0.90 – 0.95', label: 'Dense vegetation', color: '#009755' },
-    { range: '0.85 – 0.90', label: 'Dense vegetation', color: '#14aa60' },
-    { range: '0.80 – 0.85', label: 'Dense vegetation', color: '#53bd6b' },
-    { range: '0.75 – 0.80', label: 'Dense vegetation', color: '#77ca6f' },
-    { range: '0.70 – 0.75', label: 'Dense vegetation', color: '#9bd873' },
-    { range: '0.65 – 0.70', label: 'Dense vegetation', color: '#b9e383' },
-    { range: '0.60 – 0.65', label: 'Dense vegetation', color: '#d5ef94' },
-    { range: '0.55 – 0.60', label: 'Moderate vegetation', color: '#eaf7ac' },
-    { range: '0.50 – 0.55', label: 'Moderate vegetation', color: '#fdfec2' },
-    { range: '0.45 – 0.50', label: 'Moderate vegetation', color: '#ffefab' },
-    { range: '0.40 – 0.45', label: 'Moderate vegetation', color: '#ffe093' },
-    { range: '0.35 – 0.40', label: 'Sparse vegetation', color: '#ffc67d' },
-    { range: '0.30 – 0.35', label: 'Sparse vegetation', color: '#ffab69' },
-    { range: '0.25 – 0.30', label: 'Sparse vegetation', color: '#ff8d5a' },
-    { range: '0.20 – 0.25', label: 'Sparse vegetation', color: '#fe6c4a' },
-    { range: '0.15 – 0.20', label: 'Open soil', color: '#ef4c3a' },
-    { range: '0.10 – 0.15', label: 'Open soil', color: '#e02d2c' },
-    { range: '0.05 – 0.10', label: 'Open soil', color: '#c5142a' },
-    { range: '-1.00 – 0.05', label: 'Open soil', color: '#ad0028' },
+    { range: '0.9–1',   label: 'Dense vegetation',    color: '#007e47' },
+    { range: '0.8–0.9', label: 'Dense vegetation',    color: '#14aa60' },
+    { range: '0.7–0.8', label: 'Dense vegetation',    color: '#77ca6f' },
+    { range: '0.6–0.7', label: 'Healthy',             color: '#b9e383' },
+    { range: '0.5–0.6', label: 'Moderate',            color: '#eaf7ac' },
+    { range: '0.4–0.5', label: 'Moderate',            color: '#ffe093' },
+    { range: '0.3–0.4', label: 'Sparse',              color: '#ffc67d' },
+    { range: '0.2–0.3', label: 'Sparse',              color: '#ff8d5a' },
+    { range: '0.1–0.2', label: 'Open soil',           color: '#ef4c3a' },
+    { range: '<0.1',    label: 'Bare / water',        color: '#ad0028' },
 ];
 
+// Low → high gradient used for the compact color scale bar.
+const SCALE_GRADIENT =
+  'linear-gradient(90deg, #ad0028, #e02d2c, #fe6c4a, #ffab69, #ffe093, ' +
+  '#fdfec2, #d5ef94, #9bd873, #53bd6b, #14aa60, #007e47)';
+
 /**
- * Legend — Collapsible sidebar panel showing the index color legend.
- * Rendered inside the sidebar, above the FarmSummary.
+ * Legend — Floating map overlay showing the active index's color scale.
+ * Collapsed by default; expands to the full per-bin breakdown.
  */
 export default function Legend({ activeLayer }) {
   const [isOpen, setIsOpen] = useState(false);
+  const band = (activeLayer || 'ndvi').toUpperCase();
 
   return (
     <div className="map-legend-overlay">
@@ -38,10 +35,23 @@ export default function Legend({ activeLayer }) {
           onClick={() => setIsOpen(!isOpen)}
           aria-expanded={isOpen}
           type="button"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 8 }}
         >
-          <span className="sidebar-legend__title">Index Legend</span>
+          <span className="sidebar-legend__title-wrap">
+            <span className="sidebar-legend__title">Legend</span>
+            <span className="sidebar-legend__subtitle">{band} scale</span>
+          </span>
           <span className={`sidebar-legend__chevron ${isOpen ? 'is-open' : ''}`}>▼</span>
         </button>
+
+        {/* Compact color scale bar — always visible */}
+        <div style={{ padding: '6px 2px 2px' }}>
+          <div style={{ height: 10, borderRadius: 5, background: SCALE_GRADIENT }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 10, color: 'var(--c-text-muted, #7a90a8)' }}>
+            <span>Low</span>
+            <span>High</span>
+          </div>
+        </div>
 
         {isOpen && (
         <div className="sidebar-legend__body">

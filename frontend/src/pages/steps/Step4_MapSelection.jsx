@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapContainer, TileLayer, FeatureGroup, Polygon, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, FeatureGroup, Polygon, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet-draw';
 import 'leaflet/dist/leaflet.css';
@@ -75,6 +75,15 @@ function DrawControlEffect({ featureGroupRef, onPolygonDrawn }) {
   return null;
 }
 
+// ── Captures the map instance so parent controls (locate button) can use it ──
+function MapRefSetter({ onReady }) {
+  const map = useMap();
+  useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
+  return null;
+}
+
 // ── Polygon renderer for already-confirmed polygon ───────────────────────────
 function DrawnPolygon({ geometry }) {
   if (!geometry?.coordinates?.[0]) return null;
@@ -92,6 +101,37 @@ export default function Step4_MapSelection() {
   const navigate = useNavigate();
   const { state, merge, advanceStep } = useOnboarding();
   const featureGroupRef = useRef(null);
+
+  const [mapInstance, setMapInstance] = useState(null);
+  const [userPos, setUserPos]         = useState(null);
+  const [locating, setLocating]       = useState(false);
+  const [locateError, setLocateError] = useState('');
+
+  const handleLocate = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocateError('Geolocation is not supported by this browser.');
+      return;
+    }
+    setLocating(true);
+    setLocateError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setUserPos([latitude, longitude]);
+        if (mapInstance) mapInstance.flyTo([latitude, longitude], 17);
+        setLocating(false);
+      },
+      (err) => {
+        setLocateError(
+          err.code === err.PERMISSION_DENIED
+            ? 'Location permission denied. Enable it in your browser.'
+            : 'Could not get your location. Try again.'
+        );
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, [mapInstance]);
 
   // Restore any previously drawn polygon from context
   const [drawnGeom, setDrawnGeom] = useState(state.boundary_geom || null);
@@ -192,6 +232,8 @@ export default function Step4_MapSelection() {
             attribution="Map data &copy; Google"
           />
 
+          <MapRefSetter onReady={setMapInstance} />
+
           <FeatureGroup ref={featureGroupRef}>
             <DrawControlEffect
               featureGroupRef={featureGroupRef}
@@ -199,11 +241,45 @@ export default function Step4_MapSelection() {
             />
           </FeatureGroup>
 
+          {/* Pin at the user's current GPS location */}
+          {userPos && <Marker position={userPos} />}
+
           {/* Show confirmed polygon from context on re-enter */}
           {drawnGeom && !featureGroupRef.current?.getLayers().length && (
             <DrawnPolygon geometry={drawnGeom} />
           )}
         </MapContainer>
+
+        {/* ── My-location button ──────────────────────────────────────────── */}
+        <button
+          type="button"
+          onClick={handleLocate}
+          disabled={locating}
+          title="Pinpoint my current location"
+          className="absolute flex items-center gap-2 rounded-xl bg-[#1A6B3C] text-white text-sm font-semibold px-4 h-11 shadow-lg hover:bg-[#155c33] disabled:opacity-60 transition-colors"
+          style={{ zIndex: 1000, top: 73, left: 12 }}
+        >
+          {locating ? (
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v2m0 14v2m9-9h-2M5 12H3m13 0a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          )}
+          {locating ? 'Locating…' : 'My location'}
+        </button>
+
+        {locateError && (
+          <div
+            className="absolute bg-[#111820] border border-red-500/40 rounded-lg px-3 py-2 text-xs text-red-400 shadow-lg"
+            style={{ zIndex: 1000, top: 120, left: 12, maxWidth: 240 }}
+          >
+            {locateError}
+          </div>
+        )}
       </div>
 
       {/* ── Instruction toast — shown when no polygon yet ────────────────── */}
