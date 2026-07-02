@@ -6,7 +6,7 @@
  * All GEE analysis features are preserved exactly.
  */
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MapView from '../MapView';
 import Sidebar from '../Sidebar';
@@ -14,10 +14,30 @@ import Legend from '../Legend';
 import LoadingOverlay from '../LoadingOverlay';
 import TimelineBar from '../TimelineBar';
 import NavbarDropdown from '../NavbarDropdown';
-import { analyzeFarm, fetchAvailableDates, fetchDayAnalysis } from '../api';
+import { analyzeFarm, fetchAvailableDates, fetchDayAnalysis, fetchRadarAnalysis, fetchRadarDates } from '../api';
+import { radarToColor } from '../colorUtils';
 import * as turf from '@turf/turf';
 import { ChevronLeft, ChevronRight, Pencil, LocateFixed } from 'lucide-react';
 import FieldNameModal from '../FieldNameModal';
+
+// Sentinel-2 vegetation index dropdown options.
+const VEG_BAND_OPTIONS = [
+  { value: 'ndvi', label: 'NDVI' },
+  { value: 'evi', label: 'EVI' },
+  { value: 'savi', label: 'SAVI' },
+  { value: 'ndmi', label: 'NDMI' },
+  { value: 'gndvi', label: 'GNDVI' },
+  { value: 'cvi', label: 'CVI' },
+];
+
+// Sentinel-1 radar / soil-moisture layer dropdown options.
+const RADAR_BAND_OPTIONS = [
+  { value: 'smi', label: 'Soil Moisture (SMI)' },
+  { value: 'rvi', label: 'Radar Vegetation (RVI)' },
+  { value: 'ratio', label: 'VV/VH Ratio' },
+  { value: 'vv', label: 'VV Polarization' },
+  { value: 'vh', label: 'VH Polarization' },
+];
 
 export default function Analysis() {
   const navigate = useNavigate();
@@ -42,6 +62,11 @@ export default function Analysis() {
   const [mapCenter, setMapCenter]   = useState([18.1676592, 75.8131346]);
   const [locating, setLocating]     = useState(false);
 
+  // ── Sentinel-1 radar / soil-moisture state (independent of the S2 path) ──────
+  const [source, setSource] = useState('sentinel2');   // 'sentinel2' | 'sentinel1'
+  const [activeRadarBand, setActiveRadarBand] = useState('smi');
+  const radarLoadingRef = useRef(new Set());           // field ids with an in-flight radar load
+
   // Multi-field state
   const [fields, setFields]               = useState([]);
   const [activeFieldId, setActiveFieldId] = useState(null);
@@ -65,6 +90,100 @@ export default function Analysis() {
   const analysisData   = activeField?.analysisData || null;
   const availableDates = activeField?.availableDates || [];
   const selectedDate   = activeField?.selectedDate || null;
+
+  // ── Source-aware derived values (radar vs vegetation) ────────────────────────
+  const isRadar        = source === 'sentinel1';
+  const activeMapBand  = isRadar ? activeRadarBand : activeBand;
+  const radarData      = activeField?.radarData || null;
+  // What actually feeds the map/legend/timeline for the current source.
+  const displayData    = isRadar ? radarData : analysisData;
+  const displayDates   = isRadar ? (activeField?.radarDates || []) : availableDates;
+  const displayDate    = isRadar ? (activeField?.radarSelectedDate || null) : selectedDate;
+  const colorFn        = isRadar ? radarToColor : null;
+
+  // ── Radar data loading (lazy, per field + date, cached) ──────────────────────
+  const runRadarLoad = async (fieldId) => {
+    const field = fields.find(f => f.id === fieldId);
+    if (!field || radarLoadingRef.current.has(fieldId)) return;
+    radarLoadingRef.current.add(fieldId);
+    setIsDayLoading(true);
+    try {
+      let dates = field.radarDates;
+      if (!dates || dates.length === 0) {
+        try {
+          const dr = await fetchRadarDates(field.geometry);
+          dates = dr.dates || [];
+        } catch (dErr) {
+          console.warn('Could not fetch radar dates:', dErr);
+          dates = [];
+        }
+      }
+      const latest = dates.length ? dates[dates.length - 1] : null;
+      const data = await fetchRadarAnalysis(field.geometry, latest);
+      if (data.error) console.warn('Radar analysis:', data.error);
+
+      setFields(prev => prev.map(f => f.id === fieldId ? {
+        ...f,
+        radarDates: dates,
+        radarSelectedDate: latest,
+        radarData: data.error ? null : data,
+        radarCache: {
+          ...(f.radarCache || {}),
+          ...(latest && !data.error ? { [latest]: data } : {}),
+        },
+      } : f));
+    } catch (err) {
+      console.error('Radar load failed:', err);
+    } finally {
+      radarLoadingRef.current.delete(fieldId);
+      setIsDayLoading(false);
+    }
+  };
+
+  // Load radar for the active field the first time it's needed in radar mode.
+  useEffect(() => {
+    if (!isRadar || !activeFieldId) return;
+    const f = fields.find(ff => ff.id === activeFieldId);
+    if (f && f.geometry && !f.radarData && !radarLoadingRef.current.has(activeFieldId)) {
+      void runRadarLoad(activeFieldId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRadar, activeFieldId, fields]);
+
+  const handleSourceChange = (val) => {
+    setSource(val);
+  };
+
+  const handleRadarDateSelect = async (date) => {
+    if (!activeField || date === activeField.radarSelectedDate) return;
+
+    setFields(prev => prev.map(f => f.id === activeFieldId ? { ...f, radarSelectedDate: date } : f));
+
+    // Serve from cache when we already computed this (polygon, date).
+    const cached = activeField.radarCache?.[date];
+    if (cached) {
+      setFields(prev => prev.map(f => f.id === activeFieldId ? { ...f, radarData: cached } : f));
+      return;
+    }
+
+    setIsDayLoading(true);
+    try {
+      const data = await fetchRadarAnalysis(activeField.geometry, date);
+      if (data.error) {
+        console.warn(`No radar data for ${date}: ${data.error}`);
+      } else {
+        setFields(prev => prev.map(f => f.id === activeFieldId ? {
+          ...f,
+          radarData: data,
+          radarCache: { ...(f.radarCache || {}), [date]: data },
+        } : f));
+      }
+    } catch (err) {
+      console.error('Radar day analysis failed:', err);
+    } finally {
+      setIsDayLoading(false);
+    }
+  };
 
   const simulateProgress = () => {
     setCurrentStep(0);
@@ -398,31 +517,27 @@ export default function Analysis() {
           <div className="navbar__group">
           <div className="navbar__selectors">
             <NavbarDropdown
-                value="sentinel2"
-                onChange={() => {}}
-                options={[{ value: "sentinel2", label: "Sentinel-2" }]}
+                value={source}
+                onChange={handleSourceChange}
+                options={[
+                    { value: "sentinel2", label: "Sentinel-2" },
+                    { value: "sentinel1", label: "Sentinel-1 (Radar)" },
+                ]}
             />
 
             <div className="navbar__select-divider"></div>
 
             <NavbarDropdown
-                value={activeBand}
-                onChange={(val) => setActiveBand(val)}
-                options={[
-                    { value: "ndvi", label: "NDVI" },
-                    { value: "evi", label: "EVI" },
-                    { value: "savi", label: "SAVI" },
-                    { value: "ndmi", label: "NDMI" },
-                    { value: "gndvi", label: "GNDVI" },
-                    { value: "cvi", label: "CVI" }
-                ]}
+                value={isRadar ? activeRadarBand : activeBand}
+                onChange={(val) => (isRadar ? setActiveRadarBand(val) : setActiveBand(val))}
+                options={isRadar ? RADAR_BAND_OPTIONS : VEG_BAND_OPTIONS}
             />
           </div>
           </div>
 
-          <div className={`navbar__status ${isLoading ? 'is-loading' : analysisData ? 'is-success' : 'is-idle'}`}>
+          <div className={`navbar__status ${isLoading ? 'is-loading' : displayData ? 'is-success' : 'is-idle'}`}>
             <div className="status-dot"></div>
-            <span>{isLoading ? 'Analyzing…' : analysisData ? 'Ready' : 'Awaiting field'}</span>
+            <span>{isLoading ? 'Analyzing…' : displayData ? 'Ready' : 'Awaiting field'}</span>
           </div>
 
           <div className="navbar__user-bar">
@@ -463,8 +578,8 @@ export default function Analysis() {
         <main className="map-wrapper">
           <MapView
               center={mapCenter}
-              activeBand={activeBand}
-              analysisData={analysisData}
+              activeBand={activeMapBand}
+              analysisData={displayData}
               activeFieldId={activeFieldId}
               editingFieldId={editingFieldId}
               editBoundarySnapshot={editBoundarySnapshot}
@@ -473,18 +588,23 @@ export default function Analysis() {
               onDrawDelete={handleDrawDelete}
               onGeometryEdit={handleGeometryEditLive}
               showDrawHint={fields.length === 0 && !editingFieldId}
+              colorFn={colorFn}
+              radarMode={isRadar}
           />
 
-          {analysisData && activeFieldId && (
-              <Legend activeLayer={activeBand} histogramData={analysisData.farm_summary?.ndvi_histogram} />
+          {displayData && activeFieldId && (
+              <Legend
+                  activeLayer={activeMapBand}
+                  histogramData={isRadar ? undefined : analysisData?.farm_summary?.ndvi_histogram}
+              />
           )}
 
-          {/* Timeline bar at the bottom — shows available dates */}
-          {availableDates.length > 0 && (
+          {/* Timeline bar at the bottom — shows available dates for the active source */}
+          {displayDates.length > 0 && (
               <TimelineBar
-                  dates={availableDates}
-                  selectedDate={selectedDate}
-                  onDateSelect={handleDateSelect}
+                  dates={displayDates}
+                  selectedDate={displayDate}
+                  onDateSelect={isRadar ? handleRadarDateSelect : handleDateSelect}
                   isLoading={isDayLoading}
               />
           )}

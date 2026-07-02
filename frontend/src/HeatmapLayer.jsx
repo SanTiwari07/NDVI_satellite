@@ -13,7 +13,7 @@ import { ndviToColor, _rgba } from './colorUtils';
  * data/band change into an off-screen canvas (clipped to the boundary) and
  * pushed to the overlay as an image.
  */
-export default function HeatmapLayer({ data, activeBand, farmBoundary }) {
+export default function HeatmapLayer({ data, activeBand, farmBoundary, colorFn }) {
     const map = useMap();
     const overlayRef = useRef(null);
 
@@ -111,8 +111,10 @@ export default function HeatmapLayer({ data, activeBand, farmBoundary }) {
                 });
                 const radius = Math.max(maxR * pass.mult, pass.min);
 
-                const renderVal = activeBand === 'ndvi' ? Math.trunc(val * 100) / 100 : val;
-                const color = ndviToColor(renderVal);
+                // Vegetation NDVI is truncated to 0.01 steps for banding; radar
+                // (colorFn provided) keeps the raw value and maps via its own scale.
+                const renderVal = (!colorFn && activeBand === 'ndvi') ? Math.trunc(val * 100) / 100 : val;
+                const color = colorFn ? colorFn(activeBand, renderVal) : ndviToColor(renderVal);
                 const grad = ctx.createRadialGradient(center.x, center.y, 0, center.x, center.y, radius);
                 pass.stops.forEach(([stop, a]) => grad.addColorStop(stop, _rgba(color, a)));
 
@@ -140,7 +142,7 @@ export default function HeatmapLayer({ data, activeBand, farmBoundary }) {
                 className: 'cv-heatmap',
             }).addTo(map);
         }
-    }, [map, data, activeBand, farmBoundary]);
+    }, [map, data, activeBand, farmBoundary, colorFn]);
 
     // Remove the overlay when this layer unmounts (e.g. switching fields).
     useEffect(() => {
