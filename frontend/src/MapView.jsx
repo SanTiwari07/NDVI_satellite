@@ -133,18 +133,20 @@ function FarmBoundaryLayer({ boundary, isActive, isEditing, onClick, onEditUpdat
 }
 
 
-export default function MapView({ 
-    center, 
-    activeBand, 
+export default function MapView({
+    center,
+    activeBand,
     analysisData,
     activeFieldId,
     editingFieldId,
-    fields = [], 
-    onDrawComplete, 
+    fields = [],
+    onDrawComplete,
     onDrawDelete,
     onGeometryEdit,
     triggerDrawRef,
     onFieldSelect,
+    colorFn = null,
+    radarMode = false,
 }) {
     const featureGroupRef = useRef();
     const [hoverData, setHoverData] = useState(null);
@@ -244,10 +246,11 @@ export default function MapView({
                 {/* Render heatmap AND grid ONLY for the active field */}
                 {analysisData && activeFieldId && (
                     <>
-                        <HeatmapLayer 
-                            data={analysisData} 
-                            activeBand={activeBand.toLowerCase()} 
+                        <HeatmapLayer
+                            data={analysisData}
+                            activeBand={activeBand.toLowerCase()}
                             farmBoundary={fields.find(f => f.id === activeFieldId)?.geometry}
+                            colorFn={colorFn}
                         />
                         <GeoJSON 
                             key={JSON.stringify(analysisData.farm_summary || analysisData.date)}
@@ -270,7 +273,11 @@ export default function MapView({
                         <span style={{ fontWeight: 600, color: '#1A6B3C' }}>{activeBand.toUpperCase()}: </span>{hoverData.bandValue}
                     </div>
                     <div style={{ fontSize: "13px", fontWeight: 400, color: "#a1a1aa", marginTop: "4px" }}>
-                        {hoverData.bandValue < 0.3 ? "Sparse vegetation" : hoverData.bandValue <= 0.6 ? "Moderate vegetation" : "Dense vegetation"}
+                        {radarMode
+                            ? (activeBand.toLowerCase() === 'smi'
+                                ? (hoverData.bandValue < 0.33 ? "Dry soil" : hoverData.bandValue <= 0.66 ? "Moderate moisture" : "Wet soil")
+                                : "Radar backscatter")
+                            : (hoverData.bandValue < 0.3 ? "Sparse vegetation" : hoverData.bandValue <= 0.6 ? "Moderate vegetation" : "Dense vegetation")}
                     </div>
                 </div>
             )}

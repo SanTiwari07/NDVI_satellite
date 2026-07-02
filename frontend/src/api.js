@@ -59,3 +59,44 @@ export async function fetchDayAnalysis(geoJsonGeometry, date) {
 
     return await response.json();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sentinel-1 Radar / Soil Moisture (independent of the Sentinel-2 endpoints)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch available Sentinel-1 acquisition dates for a polygon.
+ */
+export async function fetchRadarDates(geoJsonGeometry) {
+    const response = await fetch('/api/analyze-radar-dates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ geometry: geoJsonGeometry }),
+    });
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `Server error: ${response.status}`);
+    }
+
+    return await response.json();
+}
+
+/**
+ * Fetch Sentinel-1 radar/soil-moisture analysis for a polygon.
+ * `date` is optional — omit for the latest available window.
+ */
+export async function fetchRadarAnalysis(geoJsonGeometry, date) {
+    const response = await fetch('/api/analyze-radar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ geometry: geoJsonGeometry, date }),
+    });
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `Server error: ${response.status}`);
+    }
+
+    return await response.json();
+}

@@ -30,7 +30,10 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from chatbot import chatbot_bp
 
-from config import LOG_LEVEL, LOG_FORMAT, LOG_DATE, LOG_FILE, GEE_PROJECT_ID, LOOKBACK_DAYS, MAX_CLOUD_COVER_PCT
+from config import (
+    LOG_LEVEL, LOG_FORMAT, LOG_DATE, LOG_FILE, GEE_PROJECT_ID,
+    LOOKBACK_DAYS, MAX_CLOUD_COVER_PCT, RADAR_BANDS, RADAR_VIS_BOUNDS,
+)
 
 # New onboarding / dashboard blueprints
 from blueprints.auth      import bp as auth_bp
@@ -53,6 +56,16 @@ from services.gee_service import (
 from services.index_service import compute_all_indices
 from services.grid_service import generate_grid, reduce_grid_values
 from services.stats_service import extract_farm_statistics
+from services.sar_service import (
+    get_s1_composite,
+    get_s1_available_dates,
+    get_smooth_radar_tile_url,
+)
+from services.radar_index_service import compute_radar_indices
+from services.radar_grid_service import (
+    reduce_radar_grid_values,
+    extract_radar_statistics,
+)
 from services.auth_service import init_firebase, verify_jwt_token
 from services.sms_service import send_otp, verify_otp
 from utils.geo_utils import geojson_to_ee_geometry, validate_polygon
@@ -124,6 +137,13 @@ NDVI_PALETTE = [
     '#77ca6f', '#53bd6b', '#14aa60', '#009755', '#007e47', '#007e47'
 ]
 CVI_PALETTE  = ['#ef4444', '#f59e0b', '#22c55e']
+
+# ── Radar (Sentinel-1) palettes ──────────────────────────────────────────────
+# Moisture-oriented layers (SMI, VV, VH): dry/low → wet/high = red → yellow → green.
+RADAR_MOISTURE_PALETTE = ['#b30000', '#e34a33', '#fc8d59', '#fdcc8a',
+                          '#ffffbf', '#c2e699', '#78c679', '#31a354', '#006837']
+# RVI / VV-VH ratio: distinct sequential palette so they don't read as moisture.
+RADAR_SEQUENTIAL_PALETTE = ['#f7fbff', '#c6dbef', '#6baed6', '#3182bd', '#08519c']
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -337,6 +357,117 @@ def analyze_day():
     except Exception as exc:
         logger.exception("Day analysis error: %s", exc)
         return jsonify({"error": str(exc)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sentinel-1 Radar / Soil Moisture Routes (independent of the S2 pipeline)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route("/api/analyze-radar-dates", methods=["POST"])
+def analyze_radar_dates():
+    """
+    POST /api/analyze-radar-dates
+        body: { "geometry": <GeoJSON Polygon> }
+        → { "dates": ["2026-06-03", ...] }
+
+    Lists available Sentinel-1 acquisition dates for the polygon.
+    """
+    if not getattr(app, "_gee_ready", False):
+        return jsonify({"error": "GEE not initialised"}), 503
+
+    body = request.get_json(silent=True)
+    if not body or "geometry" not in body:
+        return jsonify({"error": "Missing geometry"}), 400
+
+    geojson_geometry = body["geometry"]
+    valid, validation_error = validate_polygon(geojson_geometry)
+    if not valid:
+        return jsonify({"error": validation_error}), 400
+
+    try:
+        ee_geometry = geojson_to_ee_geometry(geojson_geometry)
+        dates = get_s1_available_dates(ee_geometry)
+        return jsonify({"dates": dates}), 200
+    except Exception as exc:
+        logger.exception("Error fetching S1 dates: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/analyze-radar", methods=["POST"])
+def analyze_radar():
+    """
+    POST /api/analyze-radar
+        body: { "geometry": <GeoJSON Polygon>, "date": "2026-06-03" (optional) }
+
+    Response (JSON):
+        GeoJSON FeatureCollection with per-cell radar metrics
+        (vv, vh, smi, rvi, ratio, moisture_classification), plus:
+            radar_summary, radar_tiles, tile_url (SMI), farm_boundary, date.
+
+    Fully separate from /api/analyze — Sentinel-1 has its own fetch + compute path.
+    """
+    if not getattr(app, "_gee_ready", False):
+        return jsonify({"error": "GEE not initialised"}), 503
+
+    body = request.get_json(silent=True)
+    if not body or "geometry" not in body:
+        return jsonify({"error": "Missing geometry"}), 400
+
+    geojson_geometry = body["geometry"]
+    target_date = body.get("date")
+
+    valid, validation_error = validate_polygon(geojson_geometry)
+    if not valid:
+        return jsonify({"error": validation_error}), 400
+
+    try:
+        ee_geometry = geojson_to_ee_geometry(geojson_geometry)
+        composite, scene_count, start_str, end_str = get_s1_composite(ee_geometry, target_date)
+
+        if composite is None:
+            return jsonify({
+                "error": f"No Sentinel-1 imagery found for {'this area' if not target_date else target_date}."
+            }), 200
+
+        radar_image    = compute_radar_indices(composite)
+        grid           = generate_grid(ee_geometry)
+        result_geojson = reduce_radar_grid_values(radar_image, grid, ee_geometry)
+        radar_summary  = extract_radar_statistics(radar_image, ee_geometry, scene_count)
+
+        result_geojson["radar_summary"] = radar_summary
+        result_geojson["farm_boundary"] = geojson_geometry
+        result_geojson["date"]          = target_date
+        result_geojson["scene_count"]   = scene_count
+
+        # Radar tile URLs (moisture layers vs sequential layers use distinct palettes).
+        radar_tiles = {}
+        for band in RADAR_BANDS:
+            bounds  = RADAR_VIS_BOUNDS[band]
+            palette = RADAR_MOISTURE_PALETTE if band in ("SMI", "VV", "VH") else RADAR_SEQUENTIAL_PALETTE
+            vis = {"min": bounds["min"], "max": bounds["max"], "palette": palette}
+            radar_tiles[f"{band.lower()}_tile_url"] = get_smooth_radar_tile_url(
+                radar_image, ee_geometry, band, vis
+            )
+
+        result_geojson["radar_tiles"] = radar_tiles
+        result_geojson["tile_url"]    = radar_tiles["smi_tile_url"]
+
+        # Cache for optional hover sampling, kept separate from the S2 image.
+        app._last_radar_image = radar_image
+        app._last_radar_geometry = ee_geometry
+
+        logger.info(
+            "Radar analysis complete — %d scenes, %d cells, SMI=%s (%s)",
+            scene_count,
+            len(result_geojson.get("features", [])),
+            radar_summary.get("smi"),
+            radar_summary.get("moisture_classification"),
+        )
+        return jsonify(result_geojson), 200
+
+    except Exception as exc:
+        logger.exception("Radar pipeline error: %s", exc)
+        return jsonify({"error": f"Radar pipeline error: {str(exc)}"}), 500
 
 
 @app.route("/api/sample", methods=["GET"])

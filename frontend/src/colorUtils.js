@@ -25,6 +25,58 @@ export function ndviToColor(value) {
   return EOS_PALETTE[idx] || "#007f00";
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Sentinel-1 Radar palettes (separate from the vegetation EOS palette)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Moisture-oriented layers (SMI, VV, VH): dry/low -> wet/high = red -> yellow -> green
+const RADAR_MOISTURE_PALETTE = [
+    '#b30000', '#e34a33', '#fc8d59', '#fdcc8a',
+    '#ffffbf', '#c2e699', '#78c679', '#31a354', '#006837',
+];
+
+// RVI / VV-VH ratio: a distinct sequential (blue) palette so they don't read as moisture
+const RADAR_SEQUENTIAL_PALETTE = [
+    '#f7fbff', '#c6dbef', '#9ecae1', '#6baed6', '#3182bd', '#08519c',
+];
+
+// Per-band normalisation bounds — must mirror RADAR_VIS_BOUNDS in backend/config.py.
+export const RADAR_BOUNDS = {
+    smi:   { min: 0.0,   max: 1.0 },
+    rvi:   { min: 0.0,   max: 1.0 },
+    ratio: { min: 2.0,   max: 16.0 },
+    vv:    { min: -22.0, max: -6.0 },
+    vh:    { min: -28.0, max: -12.0 },
+};
+
+const RADAR_MOISTURE_BANDS = ['smi', 'vv', 'vh'];
+
+function _pickPalette(band) {
+    return RADAR_MOISTURE_BANDS.includes(band)
+        ? RADAR_MOISTURE_PALETTE
+        : RADAR_SEQUENTIAL_PALETTE;
+}
+
+/**
+ * Convert a radar band value to a hex colour.
+ * Each band is normalised to 0..1 against its physical bounds, then mapped
+ * onto the appropriate palette (moisture vs sequential).
+ */
+export function radarToColor(band, value) {
+    if (value === null || value === undefined || isNaN(value)) return '#4b5563';
+
+    const b = (band || 'smi').toLowerCase();
+    const bounds = RADAR_BOUNDS[b] || { min: 0, max: 1 };
+    const palette = _pickPalette(b);
+
+    let t = (value - bounds.min) / (bounds.max - bounds.min);
+    if (t <= 0) return palette[0];
+    if (t >= 1) return palette[palette.length - 1];
+
+    const idx = Math.floor(t * (palette.length - 1));
+    return palette[idx] || palette[0];
+}
+
 /** Convert "rgb(r,g,b)" and "#RRGGBB" -> "rgba(r,g,b,alpha)" for canvas gradient stops */
 export function _rgba(colorStr, alpha) {
   if (colorStr.startsWith('#')) {
